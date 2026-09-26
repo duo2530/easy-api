@@ -33,13 +33,13 @@ tasks.getByName<Test>("test") {
 }
 
 kotlin {
-    val javaVersion = JavaVersion.current()
-    if (!javaVersion.isJava11Compatible) {
-        throw Error("incompatible jdk version: $javaVersion")
+    val runtimeJavaVersion = JavaVersion.current()
+    if (!runtimeJavaVersion.isJava11Compatible) {
+        throw Error("incompatible jdk version: $runtimeJavaVersion")
     }
-    val majorVersion = JavaVersion.current().majorVersion.toInt()
-    println("use jvmToolchain: $majorVersion")
-    jvmToolchain(majorVersion)
+    val buildJdk = providers.gradleProperty("easyapi_build_jdk").get().toInt()
+    println("use jvmToolchain: $buildJdk")
+    jvmToolchain(buildJdk)
 }
 
 tasks.create("codeCoverageReport", JacocoReport::class) {

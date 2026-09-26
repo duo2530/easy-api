@@ -19,6 +19,14 @@ class MybatisPlusEndpointDependencyAnalyzerTest : LightJavaCodeInsightFixtureTes
         )
         myFixture.addClass(
             """
+            package com.baomidou.mybatisplus.core.conditions.query;
+            public class LambdaQueryWrapper<T> {
+                public LambdaQueryWrapper<T> eq(Object column, Object value) { return this; }
+            }
+            """.trimIndent(),
+        )
+        myFixture.addClass(
+            """
             package com.baomidou.mybatisplus.annotation;
             public @interface TableName { String value(); }
             """.trimIndent(),
@@ -75,5 +83,22 @@ class MybatisPlusEndpointDependencyAnalyzerTest : LightJavaCodeInsightFixtureTes
         assertEquals(DatabaseOperation.SELECT, result.tableAccesses.single().operation)
         assertTrue(result.tableAccesses.single().callChain.any { it.contains("UserServiceImpl.find") })
         assertTrue(result.tableAccesses.single().callChain.last().contains("BaseMapper.selectById"))
+    }
+
+    fun testDoesNotTreatMybatisPlusWrapperHelpersAsDatabaseAccess() {
+        val helper = myFixture.addClass(
+            """
+            package example;
+            import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+            public class WrapperOnlyService {
+                public void prepare() { new LambdaQueryWrapper<User>().eq("id", 1L); }
+            }
+            """.trimIndent(),
+        )
+        val method = helper.findMethodsByName("prepare", false).single()
+
+        val result = MybatisPlusEndpointDependencyAnalyzer(project).analyze(method)
+
+        assertTrue(result.tableAccesses.isEmpty())
     }
 }

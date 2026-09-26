@@ -92,6 +92,13 @@ class MybatisPlusEndpointDependencyAnalyzer(private val project: Project) {
                         unresolved += UnresolvedCall(displayName(target), "项目方法没有方法体或可解析实现类", callChain)
                     }
                 } else {
+                    if (implementations.size > 1) {
+                        unresolved += UnresolvedCall(
+                            displayName(target),
+                            "发现 ${implementations.size} 个项目实现，无法静态确定 Spring 实际注入项；以下结果包含全部候选实现",
+                            callChain,
+                        )
+                    }
                     implementations.forEach { implementation ->
                         walk(
                             implementation,
@@ -130,10 +137,11 @@ class MybatisPlusEndpointDependencyAnalyzer(private val project: Project) {
 
     private fun isMybatisPlusTerminal(call: PsiMethodCallExpression, target: PsiMethod): Boolean {
         val owner = target.containingClass
-        if (owner?.qualifiedName?.startsWith(MYBATIS_PLUS_PACKAGE) == true) return true
         val qualifierClass = PsiTypesUtil.getPsiClass(call.methodExpression.qualifierExpression?.type)
         return isInheritor(qualifierClass, BASE_MAPPER) ||
-            (target.body == null && isInheritor(owner, BASE_MAPPER))
+            isInheritor(qualifierClass, I_SERVICE) ||
+            isInheritor(owner, BASE_MAPPER) ||
+            isInheritor(owner, I_SERVICE)
     }
 
     private fun resolveEntity(
@@ -215,7 +223,6 @@ class MybatisPlusEndpointDependencyAnalyzer(private val project: Project) {
 
     companion object {
         const val DEFAULT_MAX_DEPTH = 16
-        private const val MYBATIS_PLUS_PACKAGE = "com.baomidou.mybatisplus."
         private const val BASE_MAPPER = "com.baomidou.mybatisplus.core.mapper.BaseMapper"
         private const val I_SERVICE = "com.baomidou.mybatisplus.extension.service.IService"
         private const val SERVICE_IMPL = "com.baomidou.mybatisplus.extension.service.impl.ServiceImpl"

@@ -5,18 +5,11 @@ plugins {
 group = "com.itangcent"
 version = properties["plugin_version"]!!
 
-val intellijVersions = arrayOf(
-    mapOf("jdk" to 21, "version" to "2025.1.2", "since" to "251"),
-    mapOf("jdk" to 17, "version" to "2023.1.3", "since" to "231"),
-    mapOf("jdk" to 15, "version" to "2022.2.3", "since" to "222"),
-    mapOf("jdk" to 11, "version" to "2021.2.1", "since" to "212")
-)
-
-val javaVersion = JavaVersion.current().majorVersion.toInt()
-val (intellijVersion, intellijSince) = intellijVersions.first { javaVersion >= (it["jdk"] as Int) }.let {
-    it["version"].toString() to it["since"].toString()
-}
-println("use intellij $intellijVersion")
+// Keep the default artifact reproducible and loadable by IDEA 2024.3 regardless
+// of the JDK used to launch Gradle. Both values remain overridable with -P.
+val intellijVersion = providers.gradleProperty("easyapi_intellij_version").get()
+val intellijSince = providers.gradleProperty("easyapi_intellij_since").get()
+println("use intellij $intellijVersion (since build $intellijSince)")
 
 repositories {
     mavenCentral()
@@ -107,7 +100,9 @@ tasks.getByName<Test>("test") {
 }
 
 intellij {
-    version.set(intellijVersion)
+    providers.gradleProperty("easyapi_intellij_local_path").orNull?.let {
+        localPath.set(it)
+    } ?: version.set(intellijVersion)
     type.set("IC")
     pluginName.set("easy-api")
     sandboxDir.set("idea-sandbox")
