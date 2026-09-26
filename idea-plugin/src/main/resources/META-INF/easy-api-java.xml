@@ -41,6 +41,11 @@
                     class="com.itangcent.idea.plugin.actions.MarkdownExportAction" text="ExportMarkdown"
                     description="ExportToMarkdown">
             </action>
+            <action id="com.itangcent.idea.easy_api.actions.TableDependencyExportAction"
+                    class="com.itangcent.idea.plugin.actions.TableDependencyExportAction"
+                    text="Export Endpoint Table Dependencies"
+                    description="Analyze Controller to Service to MyBatis-Plus table dependencies">
+            </action>
         </group>
 
         <group id="EasyApiFieldsGroup" text="FieldsTo*" description="Export apis">
