@@ -13,7 +13,31 @@ class MybatisPlusEndpointDependencyAnalyzerTest : LightJavaCodeInsightFixtureTes
             package com.baomidou.mybatisplus.core.mapper;
             public interface BaseMapper<T> {
                 T selectById(Object id);
+                java.util.List<T> selectList(Object wrapper);
                 int insert(T entity);
+            }
+            """.trimIndent(),
+        )
+        myFixture.addClass(
+            """
+            package com.baomidou.mybatisplus.extension.service;
+            public interface IService<T> {
+                T getById(Object id);
+                java.util.List<T> list();
+                boolean save(T entity);
+            }
+            """.trimIndent(),
+        )
+        myFixture.addClass(
+            """
+            package com.baomidou.mybatisplus.extension.service.impl;
+            import com.baomidou.mybatisplus.core.mapper.BaseMapper;
+            import com.baomidou.mybatisplus.extension.service.IService;
+            public class ServiceImpl<M extends BaseMapper<T>, T> implements IService<T> {
+                protected M baseMapper;
+                public T getById(Object id) { return baseMapper.selectById(id); }
+                public java.util.List<T> list() { return baseMapper.selectList(null); }
+                public boolean save(T entity) { return baseMapper.insert(entity) > 0; }
             }
             """.trimIndent(),
         )
@@ -100,5 +124,64 @@ class MybatisPlusEndpointDependencyAnalyzerTest : LightJavaCodeInsightFixtureTes
         val result = MybatisPlusEndpointDependencyAnalyzer(project).analyze(method)
 
         assertTrue(result.tableAccesses.isEmpty())
+    }
+
+    fun testFollowsCustomIServiceMethodToImplementationAndMapper() {
+        myFixture.addClass(
+            """
+            package example;
+            import com.baomidou.mybatisplus.annotation.TableName;
+            @TableName("region")
+            public class Region {}
+            """.trimIndent(),
+        )
+        myFixture.addClass(
+            """
+            package example;
+            import com.baomidou.mybatisplus.extension.service.IService;
+            public interface IRegionService extends IService<Region> {
+                java.util.List<Region> queryActiveRegionList();
+            }
+            """.trimIndent(),
+        )
+        myFixture.addClass(
+            """
+            package example;
+            import com.baomidou.mybatisplus.core.mapper.BaseMapper;
+            public interface RegionMapper extends BaseMapper<Region> {}
+            """.trimIndent(),
+        )
+        myFixture.addClass(
+            """
+            package example;
+            import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
+            public class RegionServiceImpl extends ServiceImpl<RegionMapper, Region> implements IRegionService {
+                private RegionMapper regionMapper;
+                public java.util.List<Region> queryActiveRegionList() {
+                    return regionMapper.selectList(null);
+                }
+            }
+            """.trimIndent(),
+        )
+        val controller = myFixture.addClass(
+            """
+            package example;
+            public class RegionController {
+                private IRegionService regionService;
+                public java.util.List<Region> activeRegionList() {
+                    return regionService.queryActiveRegionList();
+                }
+            }
+            """.trimIndent(),
+        )
+        val method = controller.findMethodsByName("activeRegionList", false).single()
+
+        val result = MybatisPlusEndpointDependencyAnalyzer(project).analyze(method)
+
+        assertEquals(listOf("region"), result.tableAccesses.map { it.tableName }.distinct())
+        assertEquals(DatabaseOperation.SELECT, result.tableAccesses.single().operation)
+        assertTrue(result.tableAccesses.single().callChain.any { it.contains("RegionServiceImpl.queryActiveRegionList") })
+        assertTrue(result.tableAccesses.single().callChain.last().contains("BaseMapper.selectList"))
+        assertTrue(result.unresolvedCalls.none { it.call.contains("IRegionService.queryActiveRegionList") })
     }
 }

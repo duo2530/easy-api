@@ -25,6 +25,7 @@ import com.intellij.psi.util.TypeConversionUtil
 class MybatisPlusEndpointDependencyAnalyzer(private val project: Project) {
 
     private val projectScope = GlobalSearchScope.projectScope(project)
+    private val allScope = GlobalSearchScope.allScope(project)
     private val implementationCache = mutableMapOf<PsiMethod, List<PsiMethod>>()
 
     fun analyze(endpointMethod: PsiMethod, maxDepth: Int = DEFAULT_MAX_DEPTH): EndpointDependencyResult {
@@ -65,7 +66,7 @@ class MybatisPlusEndpointDependencyAnalyzer(private val project: Project) {
             }
 
             val callChain = chain + displayName(target)
-            if (isMybatisPlusTerminal(call, target)) {
+            if (isMybatisPlusTerminal(target)) {
                 val entity = resolveEntity(call, target, method.containingClass)
                 if (entity == null) {
                     unresolved += UnresolvedCall(displayName(target), "无法从 MyBatis-Plus 泛型解析实体", callChain)
@@ -135,13 +136,17 @@ class MybatisPlusEndpointDependencyAnalyzer(private val project: Project) {
         }
     }
 
-    private fun isMybatisPlusTerminal(call: PsiMethodCallExpression, target: PsiMethod): Boolean {
-        val owner = target.containingClass
-        val qualifierClass = PsiTypesUtil.getPsiClass(call.methodExpression.qualifierExpression?.type)
-        return isInheritor(qualifierClass, BASE_MAPPER) ||
-            isInheritor(qualifierClass, I_SERVICE) ||
-            isInheritor(owner, BASE_MAPPER) ||
-            isInheritor(owner, I_SERVICE)
+    private fun isMybatisPlusTerminal(target: PsiMethod): Boolean {
+        val owner = target.containingClass ?: return false
+
+        // Methods declared by MyBatis-Plus itself are terminal database operations.
+        if (owner.qualifiedName == BASE_MAPPER || owner.qualifiedName == I_SERVICE) return true
+
+        // A project-defined Mapper method still represents access to its BaseMapper entity.
+        if (isProjectSource(owner)) return isInheritor(owner, BASE_MAPPER)
+
+        // Library implementations such as ServiceImpl may also expose IService methods.
+        return isInheritor(owner, BASE_MAPPER) || isInheritor(owner, I_SERVICE)
     }
 
     private fun resolveEntity(
@@ -172,7 +177,7 @@ class MybatisPlusEndpointDependencyAnalyzer(private val project: Project) {
     }
 
     private fun entityFromHierarchy(candidate: PsiClass, baseFqn: String, parameterIndex: Int): PsiClass? {
-        val base = JavaPsiFacade.getInstance(project).findClass(baseFqn, projectScope) ?: return null
+        val base = JavaPsiFacade.getInstance(project).findClass(baseFqn, allScope) ?: return null
         if (!InheritanceUtil.isInheritorOrSelf(candidate, base, true)) return null
         val substitutor = TypeConversionUtil.getSuperClassSubstitutor(base, candidate, PsiSubstitutor.EMPTY)
         val parameter = base.typeParameters.getOrNull(parameterIndex) ?: return null
